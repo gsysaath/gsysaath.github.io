@@ -285,6 +285,9 @@ h1 span{color:var(--lav); font-style:italic; font-weight:500}
 .cm-bg-sea{fill:var(--wave); fill-opacity:.16}
 .cm-bg-road{fill:none; stroke:var(--muted); stroke-width:1; stroke-opacity:.22; stroke-linecap:round; stroke-linejoin:round}
 .cm-lead{stroke:var(--faint); stroke-width:1; stroke-opacity:.8}
+.cm-bg-building{fill:var(--muted); fill-opacity:.13; stroke:var(--muted); stroke-opacity:.22; stroke-width:.5}
+.cm-bg-path{fill:none; stroke:var(--muted); stroke-width:1; stroke-opacity:.5; stroke-dasharray:2.5 3; stroke-linecap:round}
+.cm-bg-glacier{fill:#e6eef2; fill-opacity:.65; stroke:#c2d4dc; stroke-width:1; stroke-linejoin:round}
 
 /* ---- glyphes dans les fiches ---- */
 .card-head h3{display:flex; align-items:center; gap:9px}
@@ -1443,10 +1446,19 @@ DATA.forEach(it => { const e = EXTRA[it.id]; if (e) Object.assign(it, e); });
     const len = pts => { let L = 0; for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0] - pts[i-1][0], pts[i][1] - pts[i-1][1]); return L; };
     const dpath = (pts, close) => "M " + pts.map(p => p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" L ") + (close ? " Z" : "");
     let g = "";
-    (cm.green  || []).forEach(l => { if (l.length < 4) return; const pts = P(l); if (len(pts) < 44) return; g += `<path d="${dpath(pts, true)}" class="cm-bg-green"/>`; });
-    (cm.water  || []).forEach(l => { if (l.length < 3) return; const pts = P(l); if (len(pts) < 16) return; g += `<path d="${dpath(pts, true)}" class="cm-bg-waterbody"/>`; });
-    (cm.roads  || []).forEach(l => { const pts = P(l); if (len(pts) < 24) return; g += `<path d="${dpath(pts, false)}" class="cm-bg-road"/>`; });
-    (cm.rivers || []).forEach(l => { const pts = P(l); if (len(pts) < 10) return; g += `<path d="${dpath(pts, false)}" class="cm-bg-riverline"/>`; });
+    const draw = (arr, cls, close, minLen) => (arr || []).forEach(l => {
+      if (l.length < (close ? 3 : 2)) return;
+      const pts = P(l);
+      if (len(pts) < (minLen || 0)) return;
+      g += `<path d="${dpath(pts, close)}" class="${cls}"/>`;
+    });
+    draw(cm.glacier, "cm-bg-glacier", true, 18);
+    draw(cm.green, "cm-bg-green", true, 44);
+    draw(cm.water, "cm-bg-waterbody", true, 16);
+    draw(cm.buildings, "cm-bg-building", true, 5);
+    draw(cm.roads, "cm-bg-road", false, 18);
+    draw(cm.paths, "cm-bg-path", false, 13);
+    draw(cm.rivers, "cm-bg-riverline", false, 10);
     if (cm.coast && cm.coast.length) {
       // trait de côte réel + vagues façon croquis du côté large (pas de remplissage fragile)
       cm.coast.forEach(l => { if (l.length >= 2) g += `<path d="${dpath(P(l), false)}" class="cm-bg-coast"/>`; });

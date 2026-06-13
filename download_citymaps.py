@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Télécharge le fond de carte (rivières, plans d'eau, littoral, parcs, axes
-principaux) de chaque ville depuis OpenStreetMap (API Overpass) et génère
-citymap-data.js, lu par index.html pour dessiner les cartes de ville « façon
-croquis », comme la carte nationale.
+Télécharge le fond de carte (rivières, plans d'eau, littoral, parcs, routes,
+et — pour les petits villages — bâtiments et sentiers) de chaque ville depuis
+OpenStreetMap (API Overpass) et génère citymap-data.js, lu par index.html pour
+dessiner les cartes de ville « façon croquis », comme la carte nationale.
 
     python3 download_citymaps.py
 
@@ -26,33 +26,44 @@ ENDPOINTS = [
     "https://overpass.kumi.systems/api/interpreter",
 ]
 UA = "GeorgieTripMap/1.0 (carte de voyage perso, usage non commercial)"
-RDP_TOL = 0.00022          # tolérance de simplification (~22 m)
+RDP_TOL = 0.00022          # simplification des lignes (~22 m)
+BAT_TOL = 0.00004          # simplification fine des bâtiments (~4 m, garde la forme)
+BAT_MIN = 0.00013          # diagonale mini d'un bâtiment retenu (~14 m : on jette les cabanes)
+MAX_BATIMENTS = 3000
 
-# bbox (sud, ouest, nord, est) autour des points de chaque ville
+# bbox (sud, ouest, nord, est) + niveau : 'city' = grandes villes (axes majeurs),
+# 'village' = bourgs de montagne (bâtiments + tout le réseau + sentiers)
 VILLES = {
-    "tbilissi": (41.66, 44.74, 41.74, 44.84),
-    "mtskheta": (41.81, 44.68, 41.87, 44.75),
-    "ananuri":  (42.10, 44.66, 42.20, 44.74),
-    "kazbegi":  (42.61, 44.58, 42.70, 44.70),
-    "borjomi":  (41.80, 43.33, 41.88, 43.45),
-    "kutaisi":  (42.22, 42.65, 42.32, 42.75),
-    "batumi":   (41.59, 41.58, 41.70, 41.68),
+    "tbilissi": {"bbox": (41.66, 44.74, 41.74, 44.84), "level": "city"},
+    "mtskheta": {"bbox": (41.81, 44.68, 41.87, 44.75), "level": "village"},
+    "ananuri":  {"bbox": (42.10, 44.66, 42.20, 44.74), "level": "village"},
+    "kazbegi":  {"bbox": (42.61, 44.55, 42.70, 44.70), "level": "village"},
+    "borjomi":  {"bbox": (41.80, 43.33, 41.88, 43.45), "level": "village"},
+    "kutaisi":  {"bbox": (42.22, 42.65, 42.32, 42.75), "level": "city"},
+    "batumi":   {"bbox": (41.59, 41.58, 41.70, 41.68), "level": "city"},
 }
 
 
-def overpass_query(s, w, n, e):
+def overpass_query(bbox, level):
+    s, w, n, e = bbox
     b = "%f,%f,%f,%f" % (s, w, n, e)
-    return (
-        "[out:json][timeout:90];(" +
-        'way["waterway"~"^(river|canal)$"](%s);' % b +
-        'way["natural"="water"](%s);' % b +
-        'relation["natural"="water"](%s);' % b +
-        'way["natural"="coastline"](%s);' % b +
-        'way["leisure"="park"](%s);' % b +
-        'way["landuse"~"^(forest|grass|meadow|recreation_ground|cemetery)$"](%s);' % b +
-        'way["highway"~"^(motorway|trunk|primary|secondary)$"](%s);' % b +
-        ");out geom;"
-    )
+    q = ["[out:json][timeout:120];("]
+    q.append('way["waterway"~"^(river|canal)$"](%s);' % b)
+    q.append('way["natural"="water"](%s);' % b)
+    q.append('relation["natural"="water"](%s);' % b)
+    q.append('way["natural"="coastline"](%s);' % b)
+    q.append('way["leisure"="park"](%s);' % b)
+    q.append('way["landuse"~"^(forest|grass|meadow|recreation_ground|cemetery)$"](%s);' % b)
+    if level == "city":
+        q.append('way["highway"~"^(motorway|trunk|primary|secondary)$"](%s);' % b)
+    else:
+        q.append('way["natural"="glacier"](%s);' % b)
+        q.append('relation["natural"="glacier"](%s);' % b)
+        q.append('way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service|track)$"](%s);' % b)
+        q.append('way["highway"~"^(path|footway|pedestrian|steps)$"](%s);' % b)
+        q.append('way["building"](%s);' % b)
+    q.append(");out geom;")
+    return "".join(q)
 
 
 def fetch(query):
@@ -63,7 +74,7 @@ def fetch(query):
         for attempt in range(4):
             try:
                 req = urllib.request.Request(ep, data=data, headers={"User-Agent": UA})
-                with urllib.request.urlopen(req, timeout=120) as r:
+                with urllib.request.urlopen(req, timeout=150) as r:
                     return json.loads(r.read().decode("utf-8"))
             except urllib.error.HTTPError as ex:
                 last = ex
@@ -78,7 +89,6 @@ def fetch(query):
 
 
 def rdp(pts, tol):
-    """Douglas-Peucker en coordonnées (lat,lng)."""
     if len(pts) < 3:
         return pts
     a, b = pts[0], pts[-1]
@@ -91,58 +101,76 @@ def rdp(pts, tol):
         if d > dmax:
             dmax, idx = d, i
     if dmax > tol:
-        left = rdp(pts[:idx + 1], tol)
-        right = rdp(pts[idx:], tol)
-        return left[:-1] + right
+        return rdp(pts[:idx + 1], tol)[:-1] + rdp(pts[idx:], tol)
     return [a, b]
 
 
-def geom_to_line(geom):
+def geom_to_line(geom, tol=RDP_TOL):
     pts = [[round(g["lat"], 5), round(g["lon"], 5)] for g in geom if "lat" in g and "lon" in g]
-    if len(pts) >= 2:
-        return rdp(pts, RDP_TOL)
-    return None
+    return rdp(pts, tol) if len(pts) >= 2 else None
+
+
+def bbox_diag(line):
+    xs = [p[1] for p in line]
+    ys = [p[0] for p in line]
+    return ((max(xs) - min(xs)) ** 2 + (max(ys) - min(ys)) ** 2) ** 0.5
 
 
 def classify(el, layers):
     tags = el.get("tags", {})
+    if el["type"] == "node":
+        return
     geoms = []
     if el["type"] == "way" and "geometry" in el:
         geoms = [el["geometry"]]
     elif el["type"] == "relation":
         geoms = [m["geometry"] for m in el.get("members", [])
                  if m.get("type") == "way" and m.get("role") in ("outer", "") and m.get("geometry")]
-    for g in geoms:
-        line = geom_to_line(g)
+    hw = tags.get("highway")
+    for gm in geoms:
+        if tags.get("building") is not None:
+            line = geom_to_line(gm, BAT_TOL)
+            if line and len(line) >= 3 and bbox_diag(line) >= BAT_MIN:
+                layers["buildings"].append(line)
+            continue
+        line = geom_to_line(gm)
         if not line:
             continue
         if tags.get("natural") == "coastline":
             layers["coast"].append(line)
-        elif tags.get("natural") == "water" or tags.get("waterway") in ("river", "canal"):
-            (layers["rivers"] if tags.get("waterway") else layers["water"]).append(line)
+        elif tags.get("natural") == "glacier":
+            layers["glacier"].append(line)
+        elif tags.get("natural") == "water":
+            layers["water"].append(line)
+        elif tags.get("waterway") in ("river", "canal"):
+            layers["rivers"].append(line)
+        elif hw in ("path", "footway", "pedestrian", "steps"):
+            layers["paths"].append(line)
+        elif hw:
+            layers["roads"].append(line)
         elif tags.get("leisure") == "park" or tags.get("landuse"):
             layers["green"].append(line)
-        elif tags.get("highway"):
-            layers["roads"].append(line)
 
 
 def main():
     out = {}
+    order = ["rivers", "water", "coast", "glacier", "green", "buildings", "roads", "paths"]
     print("Fond de carte OpenStreetMap (Overpass)…\n")
-    for key, (s, w, n, e) in VILLES.items():
-        print("• %s" % key)
+    for key, cfg in VILLES.items():
+        print("• %-9s (%s)" % (key, cfg["level"]))
         try:
-            data = fetch(overpass_query(s, w, n, e))
+            data = fetch(overpass_query(cfg["bbox"], cfg["level"]))
         except Exception as ex:
             print("    ! %s — ville ignorée" % ex)
             out[key] = {}
             continue
-        layers = {"rivers": [], "water": [], "coast": [], "green": [], "roads": []}
+        layers = {k: [] for k in order}
         for el in data.get("elements", []):
             classify(el, layers)
-        layers = {k: v for k, v in layers.items() if v}
-        counts = " · ".join("%s:%d" % (k, len(v)) for k, v in layers.items()) or "rien"
-        print("    %s" % counts)
+        if len(layers["buildings"]) > MAX_BATIMENTS:
+            layers["buildings"] = layers["buildings"][:MAX_BATIMENTS]
+        layers = {k: layers[k] for k in order if layers[k]}
+        print("    " + (" · ".join("%s:%d" % (k, len(v)) for k, v in layers.items()) or "rien"))
         out[key] = layers
         time.sleep(2.0)
 
@@ -150,8 +178,7 @@ def main():
         fh.write("/* Fond de carte des villes — © contributeurs OpenStreetMap (ODbL). */\n")
         fh.write("/* Généré par download_citymaps.py. Coordonnées [lat, lng]. */\n")
         fh.write("window.CITYMAPS = " + json.dumps(out, ensure_ascii=False, separators=(",", ":")) + ";\n")
-    kb = os.path.getsize(SORTIE) / 1024
-    print("\nÉcrit : %s (%.0f Ko)" % (os.path.relpath(SORTIE, ICI), kb))
+    print("\nÉcrit : %s (%.0f Ko)" % (os.path.relpath(SORTIE, ICI), os.path.getsize(SORTIE) / 1024))
 
 
 if __name__ == "__main__":
