@@ -1737,12 +1737,39 @@ DATA.forEach(it => { const e = EXTRA[it.id]; if (e) Object.assign(it, e); });
   function mapsSearch(poi) {
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(poi.name + " Géorgie")}`;
   }
+  // Liens « menu » des restaurants (trouvés sur le web : site officiel, Wolt, réseaux). Repli Google Maps sinon.
+  const MENULINKS = {
+    "tb-pkhali":       { u: "https://wolt.com/en/geo/tbilisi/restaurant/khinkalipkhali", t: "Menu (Wolt)" },
+    "tb-khinkalicoll": { u: "https://wolt.com/en/geo/tbilisi/brand/khinkali-house", t: "Menu (Wolt)" },
+    "tb-see360":       { u: "https://see360restaurant.com/", t: "Site officiel" },
+    "tb-barbarestan":  { u: "https://wolt.com/en/geo/tbilisi/restaurant/barbarestan", t: "Menu (Wolt)" },
+    "tb-craftwine":    { u: "https://craftwinerestaurant.com/index.php/menus/", t: "Menu" },
+    "tb-stricha":      { u: "https://wolt.com/en/geo/tbilisi/restaurant/stricha", t: "Menu (Wolt)" },
+    "mt-tsiskvili":    { u: "https://tsiskvili.ge/tsiskvili-mtskhetashi-menu/en", t: "Menu" },
+    "mt-hedi":         { u: "https://www.tripadvisor.com/Restaurant_Review-g1598759-d34354692-Reviews-Hedi_Restaurant-Mtskheta_Mtskheta_Mtianeti_Region.html", t: "TripAdvisor" },
+    "kz-maisi":        { u: "https://www.instagram.com/maisi_restaurant/", t: "Instagram" },
+    "kz-samani":       { u: "https://www.instagram.com/samani_restaurant/", t: "Instagram" },
+    "kz-tiba":         { u: "https://www.facebook.com/tiba.restaurant.kazbegi/", t: "Facebook" },
+    "kz-rooms":        { u: "https://www.marriott.com/en-us/dining/restaurant-bar/tbskr-rooms-kazbegi-a-member-of-design-hotels/7156308-kazbegi-kitchen.mi", t: "Site officiel" },
+    "bo-iggy":         { u: "https://www.facebook.com/profile.php?id=100062963063332", t: "Facebook" },
+    "bo-old":          { u: "https://www.facebook.com/DzveliBorjomi/", t: "Facebook" },
+    "ku-maisis":       { u: "https://wolt.com/en/geo/kutaisi/restaurant/maisis-ezo", t: "Menu (Wolt)" },
+    "ku-doli":         { u: "https://dolirestaurant.com/doli-kutaisi/", t: "Site officiel" },
+    "ba-medea":        { u: "https://silkhospitality.com/radisson-blu-batumi/restaurants-bars/medea/", t: "Menu" },
+    "ba-sisters":      { u: "https://menu.ps.me/R0Rz5i8O_iQ", t: "Menu" },
+    "ba-bluewave":     { u: "https://www.bluewave.ge/en/our-menu", t: "Menu" }
+  };
   function photosBlock(item) {
     const hasLocal = ((window.PHOTOS || {})[item.id] || []).length > 0;
-    // Restos sans photos locales : pas de volet dépliant — lien direct vers Google Maps (menu + photos clients)
+    // Restos sans photos locales : pas de volet dépliant — lien menu (si trouvé) + Google Maps (photos & avis)
     if (item.cat === "resto" && !hasLocal) {
       const m = (window.MENUS || {})[item.id];
-      return `<div class="ph-direct">${m ? `<a class="ph-btn" href="${m}" target="_blank" rel="noopener">📄 Voir le menu (PDF)</a>` : ""}<a class="ph-btn" href="${mapsSearch(item)}" target="_blank" rel="noopener">Menu &amp; photos sur Google Maps ↗</a></div>`;
+      const ml = MENULINKS[item.id];
+      return `<div class="ph-direct">`
+        + (m ? `<a class="ph-btn" href="${m}" target="_blank" rel="noopener">📄 Menu (PDF)</a>` : "")
+        + (ml ? `<a class="ph-btn" href="${ml.u}" target="_blank" rel="noopener">📋 ${ml.t} ↗</a>` : "")
+        + `<a class="ph-btn" href="${mapsSearch(item)}" target="_blank" rel="noopener">Photos &amp; avis (Google Maps) ↗</a>`
+        + `</div>`;
     }
     const lab = item.cat === "resto" ? "Voir le menu &amp; les photos" : "Voir les photos";
     return `<details class="disc photos" data-id="${item.id}"><summary>${lab}</summary><div class="ph-body" data-id="${item.id}"></div></details>`;
