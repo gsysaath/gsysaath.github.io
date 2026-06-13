@@ -266,6 +266,16 @@ h1 span{color:var(--lav); font-style:italic; font-weight:500}
 .cm-home-label{font-family:var(--sans); font-size:13px; font-weight:700; fill:#8a6d1c; paint-order:stroke; stroke:var(--paper); stroke-width:3.8px; stroke-linejoin:round}
 .cm-home-dates{font-weight:600; font-size:12px; fill:#a07d28}
 .cm-home:hover .cm-home-halo{fill-opacity:.3} .cm-home:focus{outline:none} .cm-home:focus-visible .cm-home-halo{fill-opacity:.34}
+/* fond « croquis » des cartes de ville (décoratif, derrière les points) */
+.cm-bg-hill-back{fill:var(--land); fill-opacity:.32}
+.cm-bg-hill-front{fill:var(--land); fill-opacity:.5}
+.cm-bg-ridge{fill:none; stroke:var(--coast); stroke-width:1.6; stroke-opacity:.42; stroke-linejoin:round; stroke-linecap:round}
+.cm-bg-mtn{fill:none; stroke:var(--mtn); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; opacity:.75}
+.cm-bg-snow{fill:none; stroke:#fff; stroke-width:1.6; stroke-linecap:round}
+.cm-bg-wave{fill:none; stroke:var(--wave); stroke-width:2; stroke-linecap:round; opacity:.5}
+.cm-bg-water{fill:var(--wave); fill-opacity:.12; stroke:var(--wave); stroke-opacity:.4; stroke-width:1.5}
+.cm-bg-river{fill:none; stroke:var(--wave); stroke-width:3; stroke-linecap:round; stroke-linejoin:round; stroke-opacity:.3}
+.cm-bg-sea-label{font-family:var(--serif); font-style:italic; font-size:16px; fill:var(--coast); opacity:.6}
 
 /* ---- glyphes dans les fiches ---- */
 .card-head h3{display:flex; align-items:center; gap:9px}
@@ -1368,6 +1378,52 @@ DATA.forEach(it => { const e = EXTRA[it.id]; if (e) Object.assign(it, e); });
 
   /* ====================== CARTE DE VILLE =================================== */
   // projection locale équirectangulaire (compression longitude par cos lat)
+  // Décor « croquis » des cartes de ville (collines, montagnes, mer, rivière) — purement décoratif.
+  const CITY_SCENE = {
+    tbilissi: { river: true },
+    mtskheta: { river: true },
+    ananuri:  { alpine: true, lake: true },
+    kazbegi:  { alpine: true, snow: true },
+    borjomi:  { alpine: true, river: true },
+    kutaisi:  { river: true },
+    batumi:   { sea: true }
+  };
+  function cityBackdrop(key) {
+    const VBW = 1000, x0 = 14, x1 = VBW - 14;
+    const sc = CITY_SCENE[key] || {};
+    let s = `<g class="cm-bg" aria-hidden="true">`;
+    const ridge = (baseY, amp, seed) => {
+      const n = 6, seg = (x1 - x0) / n;
+      let line = `M ${x0} ${baseY}`; const peaks = [];
+      for (let i = 0; i < n; i++) {
+        const xb = x0 + seg * (i + 1), cxp = x0 + seg * (i + 0.5);
+        const py = baseY - amp * (0.5 + 0.5 * (((i * 7 + seed * 3) % 5) / 4));
+        line += ` Q ${cxp.toFixed(1)} ${py.toFixed(1)} ${xb.toFixed(1)} ${baseY}`;
+        peaks.push([cxp, py]);
+      }
+      return { fill: line + " Z", line, peaks };
+    };
+    const back = ridge(66, 28, 1), front = ridge(74, 46, 0);
+    s += `<path d="${back.fill}" class="cm-bg-hill-back"/>`;
+    s += `<path d="${front.fill}" class="cm-bg-hill-front"/>`;
+    s += `<path d="${front.line}" class="cm-bg-ridge"/>`;
+    if (sc.alpine) front.peaks.forEach((p, i) => {
+      if (i % 2) return;
+      const [cx, py] = p, w = 24, b = 74;
+      s += `<path d="M ${(cx - w / 2).toFixed(1)} ${b} L ${cx.toFixed(1)} ${py.toFixed(1)} L ${(cx + w / 2).toFixed(1)} ${b}" class="cm-bg-mtn"/>`;
+      if (sc.snow) s += `<path d="M ${(cx - 7).toFixed(1)} ${(py + 9).toFixed(1)} L ${cx.toFixed(1)} ${py.toFixed(1)} L ${(cx + 7).toFixed(1)} ${(py + 9).toFixed(1)}" class="cm-bg-snow"/>`;
+    });
+    if (sc.sea) {
+      for (let i = 0; i < 5; i++) { const yy = 150 + i * 72; s += `<path d="M 22 ${yy} q 16 -9 32 0 t 32 0" class="cm-bg-wave"/>`; }
+      s += `<text x="58" y="300" transform="rotate(-90 58 300)" text-anchor="middle" class="cm-bg-sea-label">Mer Noire</text>`;
+    }
+    if (sc.lake) {
+      s += `<ellipse cx="845" cy="498" rx="115" ry="34" class="cm-bg-water"/>`;
+      s += `<path d="M 800 498 q 15 -8 30 0 t 30 0" class="cm-bg-wave"/><path d="M 815 514 q 13 -7 26 0 t 26 0" class="cm-bg-wave"/>`;
+    }
+    if (sc.river) s += `<path d="M ${x0} 402 C 230 366 330 458 500 424 S 770 372 ${x1} 408" class="cm-bg-river"/>`;
+    return s + `</g>`;
+  }
   function renderCityMap(key) {
     const svg = document.getElementById("citymap");
     const pois = DATA.filter(d => d.city === key);
@@ -1448,6 +1504,7 @@ DATA.forEach(it => { const e = EXTRA[it.id]; if (e) Object.assign(it, e); });
 
     // fond papier + cadre croquis + boussole + échelle
     layers += `<rect x="6" y="6" width="${VBW-12}" height="${VBH-12}" rx="18" class="cm-paper"/>`;
+    layers += cityBackdrop(key);
     layers += `<rect x="12" y="12" width="${VBW-24}" height="${VBH-24}" rx="14" class="cm-frame"/>`;
     layers += `<g class="cm-compass" transform="translate(${VBW-60},58)">
         <circle r="20" class="cm-comp-ring"/>
