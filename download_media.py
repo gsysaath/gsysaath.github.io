@@ -203,13 +203,18 @@ def filepath_url(filename, width):
 
 
 def scan_menus():
-    """menus/<id>.pdf  ->  {id: 'menus/<id>.pdf'}"""
-    out = {}
+    """menus/<id>.pdf -> PDF ; menus/<id>/*.jpg|webp|png -> liste d'images (menu photographié sur place)."""
+    pdfs, imgs = {}, {}
     if os.path.isdir(DOSSIER_MENUS):
         for f in sorted(os.listdir(DOSSIER_MENUS)):
+            full = os.path.join(DOSSIER_MENUS, f)
             if f.lower().endswith(".pdf"):
-                out[os.path.splitext(f)[0]] = "menus/" + f
-    return out
+                pdfs[os.path.splitext(f)[0]] = "menus/" + f
+            elif os.path.isdir(full):
+                pics = sorted(x for x in os.listdir(full) if x.lower().endswith(EXT_OK))
+                if pics:
+                    imgs[f] = ["menus/%s/%s" % (f, x) for x in pics]
+    return pdfs, imgs
 
 
 def main():
@@ -273,12 +278,13 @@ def main():
             print("    %d photo(s) -> %s/" % (len(liste), os.path.relpath(dest, ICI)))
         time.sleep(PAUSE)
 
-    menus = scan_menus()
+    menus, menuimg = scan_menus()
 
     with open(SORTIE, "w", encoding="utf-8") as fh:
         fh.write("/* Généré par download_media.py — photos téléchargées depuis Wikimedia Commons. */\n")
         fh.write("window.PHOTOS = " + json.dumps(photos, ensure_ascii=False, indent=2) + ";\n")
         fh.write("window.MENUS = " + json.dumps(menus, ensure_ascii=False, indent=2) + ";\n")
+        fh.write("window.MENUIMG = " + json.dumps(menuimg, ensure_ascii=False, indent=2) + ";\n")
 
     print("\nTerminé : %d photos pour %d lieux." % (total, len(photos)))
     if menus:
