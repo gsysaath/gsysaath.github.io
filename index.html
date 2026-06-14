@@ -398,7 +398,7 @@ h1 span{color:var(--lav); font-style:italic; font-weight:500}
       <div class="kicker">Carnet de voyage</div>
       <h1>Géorgie <span>2026</span></h1>
       <div class="dates">16 juin – 4 juillet · 18 nuits, entre amis</div>
-      <div class="navlinks"><a href="phrases.html">🗣️ Phrases utiles</a><a href="glossaire.html">🍽️ Glossaire des plats</a></div>
+      <div class="navlinks"><a href="phrases.html">🗣️ Phrases utiles</a><a href="glossaire.html">🍽️ Glossaire des plats</a><a href="esim.html">📶 Internet / eSIM</a></div>
     </div>
     <div class="now">
       <div class="clock"><span id="clock">--:--</span><span class="tz">heure de Tbilissi</span></div>
@@ -1743,37 +1743,30 @@ DATA.forEach(it => { const e = EXTRA[it.id]; if (e) Object.assign(it, e); });
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(poi.name + " Géorgie")}`;
   }
   // Liens « menu » des restaurants (trouvés sur le web : site officiel, Wolt, réseaux). Repli Google Maps sinon.
+  // Lien « menu » direct quand il existe vraiment (Wolt ou page menu dédiée). Sinon, on s'appuie
+  // sur la fiche Google Maps (section Menu) — pas de site vitrine ni de réseau social.
   const MENULINKS = {
-    "tb-pkhali":       { u: "https://wolt.com/en/geo/tbilisi/restaurant/khinkalipkhali", t: "Menu (Wolt)" },
-    "tb-khinkalicoll": { u: "https://wolt.com/en/geo/tbilisi/brand/khinkali-house", t: "Menu (Wolt)" },
-    "tb-see360":       { u: "https://see360restaurant.com/", t: "Site officiel" },
-    "tb-barbarestan":  { u: "https://wolt.com/en/geo/tbilisi/restaurant/barbarestan", t: "Menu (Wolt)" },
-    "tb-craftwine":    { u: "https://craftwinerestaurant.com/index.php/menus/", t: "Menu" },
-    "tb-stricha":      { u: "https://wolt.com/en/geo/tbilisi/restaurant/stricha", t: "Menu (Wolt)" },
-    "mt-tsiskvili":    { u: "https://tsiskvili.ge/tsiskvili-mtskhetashi-menu/en", t: "Menu" },
-    "mt-hedi":         { u: "https://www.tripadvisor.com/Restaurant_Review-g1598759-d34354692-Reviews-Hedi_Restaurant-Mtskheta_Mtskheta_Mtianeti_Region.html", t: "TripAdvisor" },
-    "kz-maisi":        { u: "https://www.instagram.com/maisi_restaurant/", t: "Instagram" },
-    "kz-samani":       { u: "https://www.instagram.com/samani_restaurant/", t: "Instagram" },
-    "kz-tiba":         { u: "https://www.facebook.com/tiba.restaurant.kazbegi/", t: "Facebook" },
-    "kz-rooms":        { u: "https://www.marriott.com/en-us/dining/restaurant-bar/tbskr-rooms-kazbegi-a-member-of-design-hotels/7156308-kazbegi-kitchen.mi", t: "Site officiel" },
-    "bo-iggy":         { u: "https://www.facebook.com/profile.php?id=100062963063332", t: "Facebook" },
-    "bo-old":          { u: "https://www.facebook.com/DzveliBorjomi/", t: "Facebook" },
-    "ku-maisis":       { u: "https://wolt.com/en/geo/kutaisi/restaurant/maisis-ezo", t: "Menu (Wolt)" },
-    "ku-doli":         { u: "https://dolirestaurant.com/doli-kutaisi/", t: "Site officiel" },
-    "ba-medea":        { u: "https://silkhospitality.com/radisson-blu-batumi/restaurants-bars/medea/", t: "Menu" },
-    "ba-sisters":      { u: "https://menu.ps.me/R0Rz5i8O_iQ", t: "Menu" },
-    "ba-bluewave":     { u: "https://www.bluewave.ge/en/our-menu", t: "Menu" }
+    "tb-pkhali":       [{ t: "Menu (Wolt)", u: "https://wolt.com/en/geo/tbilisi/restaurant/khinkalipkhali" }],
+    "tb-khinkalicoll": [{ t: "Menu (Wolt)", u: "https://wolt.com/en/geo/tbilisi/brand/khinkali-house" }],
+    "tb-barbarestan":  [{ t: "Menu (Wolt)", u: "https://wolt.com/en/geo/tbilisi/restaurant/barbarestan" }],
+    "tb-stricha":      [{ t: "Menu (Wolt)", u: "https://wolt.com/en/geo/tbilisi/restaurant/stricha" }],
+    "tb-craftwine":    [{ t: "Carte, vins & desserts", u: "https://craftwinerestaurant.com/index.php/menus/" }],
+    "mt-tsiskvili":    [{ t: "Menu", u: "https://tsiskvili.ge/tsiskvili-mtskhetashi-menu/en" }],
+    "ku-maisis":       [{ t: "Menu (Wolt)", u: "https://wolt.com/en/geo/kutaisi/restaurant/maisis-ezo" }],
+    "ba-sisters":      [{ t: "Menu", u: "https://menu.ps.me/R0Rz5i8O_iQ" }],
+    "ba-bluewave":     [{ t: "Menu", u: "https://www.bluewave.ge/en/our-menu" }]
   };
   function photosBlock(item) {
     const hasLocal = ((window.PHOTOS || {})[item.id] || []).length > 0;
     // Restos sans photos locales : pas de volet dépliant — lien menu (si trouvé) + Google Maps (photos & avis)
     if (item.cat === "resto" && !hasLocal) {
       const m = (window.MENUS || {})[item.id];
-      const ml = MENULINKS[item.id];
+      const links = MENULINKS[item.id] || [];
+      const gLabel = links.length ? "Photos &amp; avis (Google Maps)" : "Menu &amp; photos (Google Maps)";
       return `<div class="ph-direct">`
         + (m ? `<a class="ph-btn" href="${m}" target="_blank" rel="noopener">📄 Menu (PDF)</a>` : "")
-        + (ml ? `<a class="ph-btn" href="${ml.u}" target="_blank" rel="noopener">📋 ${ml.t} ↗</a>` : "")
-        + `<a class="ph-btn" href="${mapsSearch(item)}" target="_blank" rel="noopener">Photos &amp; avis (Google Maps) ↗</a>`
+        + links.map(l => `<a class="ph-btn" href="${l.u}" target="_blank" rel="noopener">📋 ${l.t} ↗</a>`).join("")
+        + `<a class="ph-btn" href="${mapsSearch(item)}" target="_blank" rel="noopener">${gLabel} ↗</a>`
         + `</div>`;
     }
     const lab = item.cat === "resto" ? "Voir le menu &amp; les photos" : "Voir les photos";
