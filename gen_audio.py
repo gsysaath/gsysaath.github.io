@@ -24,6 +24,7 @@ ICI = os.path.dirname(os.path.abspath(__file__))
 PAGES = ["phrases.html", "glossaire.html"]
 DEST = os.path.join(ICI, "audio", "ka")
 EDGE_VOICE = "ka-GE-EkaNeural"   # voix féminine géorgienne (essayer aussi ka-GE-GiorgiNeural)
+EDGE_RATE = "-15%"               # un peu plus lent que la normale (clarté)
 
 
 def collect():
@@ -41,7 +42,7 @@ def collect():
 def synth_edge(text, out):
     import asyncio
     import edge_tts
-    asyncio.run(edge_tts.Communicate(text, EDGE_VOICE).save(out))
+    asyncio.run(edge_tts.Communicate(text, EDGE_VOICE, rate=EDGE_RATE).save(out))
 
 
 def synth_espeak(text, out):
